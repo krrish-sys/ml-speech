@@ -72,7 +72,7 @@ def load_settings(config_path: Path | None = None) -> AuthSettings:
     return AuthSettings(
         version=str(raw["version"]),
         mongodb_uri=require("MONGODB_URI"),
-        mongodb_db=require("MONGODB_DB"),
+        mongodb_db=optional("MONGODB_DB", "speech_guru"),
         pw_min_length=int(pw["min_length"]),
         pw_max_length=int(pw["max_length"]),
         pw_min_personal_token=int(pw["min_personal_token"]),
@@ -103,10 +103,8 @@ def load_settings(config_path: Path | None = None) -> AuthSettings:
             origin.rstrip("/")
             for origin in (
                 csv("CORS_ORIGINS")
-                if os.environ.get("CORS_ORIGINS")
-                else csv("CORS_ALLOWED_ORIGINS")
-                if os.environ.get("CORS_ALLOWED_ORIGINS")
-                else ()
+                or csv("CORS_ALLOWED_ORIGINS")
+                or ("https://speech-guru-six.vercel.app", "http://localhost:5173", "http://localhost:8000")
             )
         ),
     )
