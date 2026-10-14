@@ -192,9 +192,10 @@ graph LR
 
 ---
 ## Current Status
-- **Active phase:** Production Deployment & Cloud Optimization (Session 70).
-- **Last completed:** Eliminated API crash and browser alert on Practice page by replacing memory-heavy distilgpt2 with zero-RAM curated practice passages, pre-caching whisper-tiny in Docker, and adding client-side fallback (Session 70, D-089).
+- **Active phase:** Production Deployment & Cloud Optimization (Session 71).
+- **Last completed:** Eliminated 21s pipeline crash and Render 512MB OOM (SIGKILL 137) during recording analysis by replacing dynamic Whisper ASR loading with zero-RAM acoustic speech segmentation and reducing batch size to 4 (Session 71, D-090).
 - **Next action:** Commit and push changes to GitHub `main` for automatic redeployment on Render and Vercel.
+
 
 
 

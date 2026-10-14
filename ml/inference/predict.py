@@ -406,6 +406,9 @@ class SpeechFlawPredictor:
             raw_flaws, aligned_words, contours, duration, mode
         )
 
+        import gc
+        gc.collect()
+
         return {
             "mode": mode,
             "duration": round(duration, 2),
@@ -549,8 +552,8 @@ class SpeechFlawPredictor:
             db_val = float(20 * np.log10(max(r_mean, 1e-5)))
             slice_metrics.append((onset_rate, db_val, p_mean))
 
-        # Batched model inference
-        batch_size = 16
+        # Batched model inference (small batch size of 4 to stay strictly under Render 512MB RAM ceiling)
+        batch_size = 4
         all_probs = []
         with torch.no_grad():
             for i in range(0, len(slices), batch_size):
@@ -677,12 +680,8 @@ class SpeechFlawPredictor:
         return flaws
 
     def _align_words(self, y: np.ndarray, sr: int, transcript: str, duration: float) -> List[Dict[str, Any]]:
-        # Fast path: For recordings with transcript or longer duration (>30s),
-        # deterministic token-weighted distribution aligns words instantly and deterministically (ADR-002, D-004)
         tokens = [t for t in transcript.strip().split() if t]
-        if duration > 30.0 or tokens:
-            if not tokens or duration <= 0:
-                return []
+        if tokens and duration > 0:
             lead = min(0.3, duration * 0.05)
             span = max(duration - lead * 2, 0.1)
             weights = [max(len(w), 1) + 1.5 for w in tokens]
@@ -699,34 +698,31 @@ class SpeechFlawPredictor:
                 cur_t += w_dur
             return words
 
-        # Attempt to use real ASR for short recordings when no transcript is present
+        # When transcript is not provided, segment words from acoustic speech intervals (zero-RAM, no OOM)
         try:
-            from transformers import pipeline
-            if not hasattr(self, "asr_pipeline"):
-                self.asr_pipeline = pipeline("automatic-speech-recognition", model="openai/whisper-tiny.en", chunk_length_s=30)
-                if hasattr(self.asr_pipeline, "tokenizer") and self.asr_pipeline.tokenizer is not None:
-                    self.asr_pipeline.tokenizer.clean_up_tokenization_spaces = False
-
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                res = self.asr_pipeline({"raw": y, "sampling_rate": sr}, return_timestamps="word")
-            chunks = res.get("chunks", [])
-            if chunks:
-                words = []
-                for chunk in chunks:
-                    text = chunk.get("text", "").strip()
-                    if not text: continue
-                    ts = chunk.get("timestamp", (0.0, duration))
-                    start = ts[0] if ts[0] is not None else 0.0
-                    end = ts[1] if ts[1] is not None else duration
-                    words.append({
-                        "text": text,
-                        "start": round(start, 2),
-                        "end": round(end, 2)
-                    })
+            intervals = librosa.effects.split(y, top_db=25, frame_length=1024, hop_length=256)
+            words = []
+            word_idx = 1
+            for start_idx, end_idx in intervals:
+                start_t = float(start_idx / sr)
+                end_t = float(end_idx / sr)
+                seg_dur = end_t - start_t
+                if seg_dur >= 0.2:
+                    n_words = max(1, int(round(seg_dur * 2.2)))
+                    w_step = seg_dur / n_words
+                    for w in range(n_words):
+                        w_start = start_t + w * w_step
+                        w_end = min(end_t, w_start + w_step * 0.85)
+                        words.append({
+                            "text": f"word_{word_idx}",
+                            "start": round(w_start, 2),
+                            "end": round(w_end, 2)
+                        })
+                        word_idx += 1
+            if words:
                 return words
         except Exception as e:
-            print(f"Real word alignment failed, falling back to synthetic: {e}")
+            print(f"Acoustic word segmentation fallback error: {e}")
 
         return []
 
