@@ -14,7 +14,6 @@ try:
 except ImportError:
     pipeline = None
 
-_text_pipeline = None
 
 # Ensure project root is in path
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
@@ -180,46 +179,49 @@ async def get_job_status(job_id: str, user: User = Depends(require_user)):
         **public
     }
 
+PRACTICE_SCRIPTS = [
+    "The future does not belong to those who wait for certainty. It belongs to those who have the courage to take the first step when the path ahead is still obscured. We must build with purpose, speak with clarity, and lead with empathy.",
+    "Over the past three quarters, our operational efficiency improved by twenty-four percent while customer retention reached an all-time high. The key driver was not cutting corners, but streamlining cross-functional alignment and prioritizing high-leverage product initiatives.",
+    "Complex systems fail in complex ways. By isolating state, eliminating hidden dependencies, and enforcing deterministic contracts across services, we turn unpredictable failures into observable, self-healing events.",
+    "When our deployment pipeline experienced an unexpected outage during peak hours, I immediately convened our incident response squad, established clear communication channels, and rolled back the offending migration within eight minutes.",
+    "Global markets stabilized today as central banks signaled a pause in interest rate hikes, pointing to cooling consumer inflation. In technology, renewable infrastructure investments surged past quarterly projections across North America and Europe.",
+    "The measure of true innovation is not whether a technology can be built, but whether it serves the genuine welfare of the society that sustains it. Progress without accountability is merely disruption without direction.",
+    "The wind howled across the ridge as the fog began to settle over the valley. In the distance, a solitary light flickered through the pine trees, reminding us that no matter how treacherous the climb, warmth was waiting at the summit.",
+    "We choose to go to the moon in this decade and do the other things, not because they are easy, but because they are hard, because that goal will serve to organize and measure the best of our energies and skills.",
+    "Recent observations from deep-space telescopes have revealed atmospheric signatures on distant exoplanets that defy our previous models. Every discovery reminds us that the universe is far richer and more nuanced than our textbooks suggest.",
+    "A great team is not defined by an absence of obstacles, but by the resilience with which they confront them. When everyone shares a common vision and trusts each other completely, even insurmountable challenges become milestones."
+]
+
 @router.post("/generate-script")
 async def generate_script(user: User = Depends(require_user)):
-    global _text_pipeline
     per_user_limit("generate", user.id, get_privacy_settings().generate_per_hour)
 
-    if pipeline is None:
-        return {"transcript": "transformers library is not installed."}
-
     try:
-        import warnings
-
-        from transformers import logging as hf_logging
-        warnings.filterwarnings("ignore", category=UserWarning)
-        warnings.filterwarnings("ignore", category=FutureWarning)
-        hf_logging.set_verbosity_error()
-        if _text_pipeline is None:
-            _text_pipeline = pipeline("text-generation", model="distilgpt2")
         import random
-        prompts = [
-            "Today we will discuss the importance of communication in the modern workplace.",
-            "As we look towards the future of technology, one thing becomes clear:",
-            "The greatest challenge facing our industry right now is",
-            "Welcome everyone. I'm excited to share some new insights regarding",
-            "Let me tell you a story about a time when everything seemed to go wrong, but"
-        ]
-        prompt = random.choice(prompts)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            result = _text_pipeline(prompt, max_new_tokens=40, do_sample=True, temperature=0.7, repetition_penalty=1.2)
-        generated_text = result[0]["generated_text"].strip()
-        # Clean up any trailing incomplete sentences
-        if not generated_text.endswith((".", "!", "?")):
-            last_punc = max(generated_text.rfind('.'), generated_text.rfind('!'), generated_text.rfind('?'))
-            if last_punc > 0:
-                generated_text = generated_text[:last_punc+1]
-                
-        return {"transcript": generated_text}
+        # First try to pull a rich passage from the RAG corpus if available
+        try:
+            from backend.rag.retriever import get_retriever
+            retriever = get_retriever()
+            domains = ["newsroom", "debate", "storytelling"]
+            domain = random.choice(domains)
+            docs = retriever.in_domain(domain)
+            if docs:
+                chosen = random.choice(docs)
+                content = chosen.get("content", "").strip()
+                if content and len(content) > 30:
+                    # Take the first ~2-3 sentences (around 50-80 words)
+                    sentences = [s.strip() for s in content.split(".") if s.strip()]
+                    if len(sentences) >= 2:
+                        passage = ". ".join(sentences[:3]) + "."
+                        return {"transcript": passage}
+        except Exception:
+            pass
+
+        # Fallback to curated high-quality speech practice passages
+        return {"transcript": random.choice(PRACTICE_SCRIPTS)}
     except Exception as e:  # noqa: BLE001 - generation is best effort; return a message instead
         print(f"Generation error: {e}")
-        return {"transcript": "Error generating practice script."}
+        return {"transcript": "Welcome everyone. I am excited to share some new insights regarding our communication strategy."}
 
 _asr_pipeline = None
 

@@ -72,6 +72,8 @@ def app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[FastAPI]:
     app.include_router(leaderboard_router, prefix="/api")
     app.include_router(rag_router, prefix="/api")
     app.include_router(modes_router, prefix="/api")
+    from backend.api.routers import analysis
+    app.include_router(analysis.router, prefix="/api")
 
     @app.get("/api/private")
     def private(user: User = Depends(require_user)) -> dict[str, str]:

@@ -33,12 +33,15 @@ RUN pip install --no-cache-dir torch torchaudio --index-url ${TORCH_INDEX_URL}
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 3. Pre-download & cache facebook/wav2vec2-base weights so container runs fully offline
-RUN python -c "from transformers import Wav2Vec2Model, Wav2Vec2Processor; \
-    print('[*] Pre-caching facebook/wav2vec2-base...'); \
+# 3. Pre-download & cache facebook/wav2vec2-base and whisper-tiny.en weights so container runs fully offline
+RUN python -c "from transformers import Wav2Vec2Model, Wav2Vec2Processor, AutoModelForSpeechSeq2Seq, AutoProcessor; \
+    print('[*] Pre-caching models...'); \
     Wav2Vec2Model.from_pretrained('facebook/wav2vec2-base'); \
     Wav2Vec2Processor.from_pretrained('facebook/wav2vec2-base'); \
+    AutoModelForSpeechSeq2Seq.from_pretrained('openai/whisper-tiny.en'); \
+    AutoProcessor.from_pretrained('openai/whisper-tiny.en'); \
     print('[+] Pre-caching complete!')"
+
 
 # 4. Copy codebase
 COPY . /app/

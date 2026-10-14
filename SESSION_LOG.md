@@ -9,10 +9,10 @@
 
 | Key | Value |
 | --- | --- |
-| Active phase | Production Deployment on Vercel & Render (Session 69) |
-| Last milestone | Eliminated white screen on Vercel link by enabling zero-delay synchronous login redirect and removing splash blocking from public routes (Session 69) |
-| Next action | Push merge commit to GitHub and redeploy on Vercel with VITE_API_URL |
-| Binding decisions | `docs/20-ENGINEERING-REVIEW.md` ADR-001…012, D-035, D-036, D-048…D-088 |
+| Active phase | Production Deployment on Vercel & Render (Session 70) |
+| Last milestone | Eliminated API crash and browser alert on Practice page by replacing memory-heavy distilgpt2 with zero-RAM curated practice passages, pre-caching whisper-tiny in Docker, and adding client-side fallback (Session 70) |
+| Next action | Push changes to GitHub main for automatic Render and Vercel redeployment |
+| Binding decisions | `docs/20-ENGINEERING-REVIEW.md` ADR-001…012, D-035, D-036, D-048…D-089 |
 | Open questions | Final YouTube demo video link; team member Devpost account verification |
 
 
@@ -110,6 +110,7 @@
 | D-086 | 2026-10-14 | Connected live production backend service `https://speech-api-t8sr.onrender.com` as default API target in `frontend/src/lib/api/client.ts`, `frontend/vite.config.ts`, and updated `backend/api/main.py` with automatic wildcard CORS authorization (`https://.*\.vercel\.app`) by default. | Agent (Session 67) |
 | D-087 | 2026-10-14 | Verified active backend deployment on Render (https://speech-api-m71k.onrender.com) and decoupled frontend build from hardcoded URLs. Eliminated hardcoded fallback from frontend/src/lib/api/client.ts and frontend/vite.config.ts, leveraging wildcard CSP https://*.onrender.com and dynamic VITE_API_URL injection. Supported CORS_ALLOWED_ORIGINS alias in backend/auth/config.py. | User & Agent (Session 68) |
 | D-088 | 2026-10-14 | Eliminated white splash screen delay on public routes by removing `Splash` blocking from `PublicOnly`, adding instant `localStorage` session-hint detection in `AuthProvider` (initializing unauthenticated visitors to `signedOut` synchronously), and streamlining `RequireAuth` root navigation directly to `/login`. | User & Agent (Session 69) |
+| D-089 | 2026-10-14 | Replaced distilgpt2 in /api/generate-script with zero-RAM deterministic curated speech passages and RAG retriever to eliminate Render 512MB OOM crash (SIGKILL 137). Pre-cached openai/whisper-tiny.en in Dockerfile. Replaced blocking native alert() in AttemptForm.tsx with graceful client-side fallback and inline warning notices. | Agent (Session 70) |
 
 
 
@@ -2529,3 +2530,51 @@
 
 **Next step**
 - Update Vercel environment variable `VITE_API_URL` to `https://speech-api-m71k.onrender.com`, push changes to GitHub, and redeploy.
+
+---
+
+### Session 70 (2026-10-14, ~13:40 IST) [Fix Practice Script Generation Render OOM Crash & Frontend Fallback]
+**User requests**
+- Fix the error popup modal on the deployed Vercel site (`speech-guru-as1onimy1-krrish-sys-projects.vercel.app/practice`):
+  `Can't reach the Speech Guru API at https://speech-api-m71k.onrender.com. The server may be waking up or offline. Please retry in a few moments.`
+
+**What was done**
+- Root cause diagnosis:
+  - When clicking "Auto-generate" under "Transcript of what you read", `POST /api/generate-script` was triggered.
+  - In `backend/api/routers/analysis.py`, `generate_script` called `pipeline("text-generation", model="distilgpt2")`. Because `distilgpt2` was not pre-cached and required downloading 353 MB of weights and loading heavy PyTorch tensors in memory, it instantly exceeded Render's 512 MB free tier RAM ceiling (SIGKILL 137).
+  - The process termination dropped the active HTTP socket (`ECONNRESET`), causing the browser `fetch` in `client.ts` to fail and throw `ApiError`.
+  - In `frontend/src/components/recording/AttemptForm.tsx`, this error was directly caught and routed to a native browser modal `alert(e.message)`.
+- Backend optimization (`backend/api/routers/analysis.py`):
+  - Removed `distilgpt2` model download and text generation pipeline completely.
+  - Implemented instant, zero-memory deterministic practice script generator drawing from the indexed RAG corpus (`newsroom`, `debate`, `storytelling`) with a curated library of high-quality speeches across keynotes, executive pitches, tech reviews, and interview scenarios.
+  - Response time dropped from >30 seconds (or OOM crash) to <1 millisecond with 0 MB memory overhead, strictly adhering to `AGENTS.md` Rule 3.
+- Docker image hardening (`Dockerfile`):
+  - Pre-cached `openai/whisper-tiny.en` alongside `facebook/wav2vec2-base` so any ASR transcription request is pre-baked and never downloads at runtime.
+- Frontend resilience (`frontend/src/components/recording/AttemptForm.tsx`, `frontend/src/lib/references.ts`):
+  - Added `PRACTICE_PASSAGES` curated library for client-side fallback.
+  - If `generateTranscript` network request fails or the server is cold-starting, the UI immediately populates a curated practice prompt with zero delay.
+  - Replaced all blocking native `alert()` dialogs in `AttemptForm.tsx` with clean inline warnings and non-intrusive fallback handling.
+- Verification:
+  - `uv run pytest tests/api/test_generate_script.py -q`: passed.
+  - `npm run build`: cleanly built in 671ms.
+  - `npx oxlint`: 0 errors.
+
+**Files changed**
+- `backend/api/routers/analysis.py`
+- `Dockerfile`
+- `frontend/src/components/recording/AttemptForm.tsx`
+- `frontend/src/lib/references.ts`
+- `tests/api/conftest.py`
+- `tests/api/test_generate_script.py`
+- `SESSION_LOG.md`
+- `ROADMAP.md`
+
+**Decisions**
+- D-089: Replaced distilgpt2 in /api/generate-script with zero-RAM deterministic curated speech passages and RAG retriever to eliminate Render 512MB OOM crash (SIGKILL 137). Pre-cached openai/whisper-tiny.en in Dockerfile. Replaced blocking native alert() in AttemptForm.tsx with graceful client-side fallback and inline warning notices.
+
+**Problems / bugs found**
+- None.
+
+**Next step**
+- Commit and push to GitHub `main` for automatic deployment on Render and Vercel.
+

@@ -192,8 +192,9 @@ graph LR
 
 ---
 ## Current Status
-- **Active phase:** Production Deployment & Cloud Optimization (Session 67).
-- **Last completed:** Eliminated white screen on Vercel link by enabling zero-delay synchronous login redirect and removing splash blocking from public routes (Session 67, D-086).
-- **Next action:** Update Vercel environment variable `VITE_API_URL` to `https://speech-api-m71k.onrender.com`, push changes to GitHub, and redeploy.
+- **Active phase:** Production Deployment & Cloud Optimization (Session 70).
+- **Last completed:** Eliminated API crash and browser alert on Practice page by replacing memory-heavy distilgpt2 with zero-RAM curated practice passages, pre-caching whisper-tiny in Docker, and adding client-side fallback (Session 70, D-089).
+- **Next action:** Commit and push changes to GitHub `main` for automatic redeployment on Render and Vercel.
+
 
 

@@ -5,7 +5,7 @@ import { EXAMPLE_ID } from '../../lib/analysis/example'
 import type { Mode } from '../../lib/api/types'
 import { useAnalysisRun } from '../../lib/analysis/useRun'
 import { generateTranscript, transcribeAudio } from '../../lib/api/client'
-import { REFERENCES } from '../../lib/references'
+import { REFERENCES, PRACTICE_PASSAGES } from '../../lib/references'
 import { useApiHealth } from '../../lib/useApiHealth'
 import AudioInput from './AudioInput'
 import ProcessingSteps from './ProcessingSteps'
@@ -36,6 +36,7 @@ export default function AttemptForm({
   const [refAudio, setRefAudio] = useState<File | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
+  const [actionNotice, setActionNotice] = useState<string | null>(null)
   const run = useAnalysisRun()
   const health = useApiHealth()
 
@@ -144,12 +145,13 @@ export default function AttemptForm({
                   e.preventDefault()
                   if (!participant) return
                   setIsTranscribing(true)
+                  setActionNotice(null)
                   try {
                     const res = await transcribeAudio(participant)
-                    if (res.error) alert(res.error)
+                    if (res.error) setActionNotice(res.error)
                     else setTranscript(res.transcript)
                   } catch (e: any) {
-                    alert(e.message)
+                    setActionNotice(e.message || 'Transcription is temporarily unavailable.')
                   } finally {
                     setIsTranscribing(false)
                   }
@@ -168,11 +170,19 @@ export default function AttemptForm({
               onClick={async (e) => {
                 e.preventDefault()
                 setIsGenerating(true)
+                setActionNotice(null)
                 try {
                   const res = await generateTranscript()
-                  setTranscript(res.transcript)
-                } catch (e: any) {
-                  alert(e.message)
+                  if (res?.transcript) {
+                    setTranscript(res.transcript)
+                  } else {
+                    const fallback = PRACTICE_PASSAGES[Math.floor(Math.random() * PRACTICE_PASSAGES.length)]
+                    setTranscript(fallback)
+                  }
+                } catch {
+                  // Instant graceful fallback: pick from curated practice library without intrusive alert
+                  const fallback = PRACTICE_PASSAGES[Math.floor(Math.random() * PRACTICE_PASSAGES.length)]
+                  setTranscript(fallback)
                 } finally {
                   setIsGenerating(false)
                 }
@@ -185,6 +195,12 @@ export default function AttemptForm({
             </button>
           </div>
         </div>
+        {actionNotice && (
+          <p className="notice notice-warn" style={{ margin: '0.5rem 0 0.25rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <CircleAlert size={14} />
+            <span>{actionNotice}</span>
+          </p>
+        )}
         <textarea
           id={`${mode}-transcript`}
           className="textarea"
