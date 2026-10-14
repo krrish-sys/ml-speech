@@ -97,7 +97,7 @@ Render does not include a free persistent database, so a cloud MongoDB cluster i
 
 7. Click **Create Web Service**.
 8. Once deployment finishes and status turns to **Live**, copy your Render URL:
-   `https://speech-guru-api.onrender.com`
+   `https://<your-service>.onrender.com` (for example: `https://speech-api-m71k.onrender.com`)
 
 ---
 
@@ -115,7 +115,7 @@ Render does not include a free persistent database, so a cloud MongoDB cluster i
 
 | Key | Value | Explanation |
 | --- | --- | --- |
-| `VITE_API_URL` | `https://speech-guru-api.onrender.com` | **Your Render backend URL without trailing slash** |
+| `VITE_API_URL` | `https://<your-service>.onrender.com` | **Your Render backend URL without trailing slash** |
 
 6. Click **Deploy**.
 7. Vercel will install dependencies, compile TypeScript, run Vite build, and provide your live URL:
@@ -127,10 +127,10 @@ Render does not include a free persistent database, so a cloud MongoDB cluster i
 
 Once you have your live Vercel URL (e.g. `https://speech-guru.vercel.app`):
 
-1. Go back to your [Render Dashboard](https://dashboard.render.com/) ➔ `speech-guru-api` ➔ **Environment**.
+1. Go back to your [Render Dashboard](https://dashboard.render.com/) ➔ your web service ➔ **Environment**.
 2. Verify or update:
-   - `CORS_ORIGINS` = `https://speech-guru.vercel.app`
-   - `APP_URL` = `https://speech-guru.vercel.app`
+   - `CORS_ORIGINS` = `https://<your-project>.vercel.app`
+   - `APP_URL` = `https://<your-project>.vercel.app`
 3. Click **Save Changes** (Render will automatically redeploy in ~15 seconds).
 
 ---
@@ -140,7 +140,7 @@ Once you have your live Vercel URL (e.g. `https://speech-guru.vercel.app`):
 Run through these checks to ensure complete error-free operation:
 
 - [ ] **Health Endpoint**:
-  Visit `https://speech-guru-api.onrender.com/api/health`.
+  Visit `https://<your-service>.onrender.com/api/health`.
   Expected response:
   ```json
   {"status":"ok","services":{"mongodb":"up"}}

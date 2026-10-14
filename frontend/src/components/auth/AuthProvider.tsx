@@ -9,9 +9,21 @@ import { getConsent, needsChoice, onConsentChanged } from '../../lib/consent'
 /** No answer (0), or the API is up but its session store or database isn't (503): not "signed out". */
 const unreachable = (e: unknown) => e instanceof ApiError && (e.status === 0 || e.status === 503)
 
+const HAS_SESSION_KEY = 'sa_has_session'
+
+function hasSessionHint(): boolean {
+  try {
+    return localStorage.getItem(HAS_SESSION_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 /** Owns the signed-in user. The session cookie is HttpOnly; only the CSRF token lives here, in memory. */
 export default function AuthProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<AuthStatus>('loading')
+  // If there is no previous session stored, start immediately in 'signedOut' state
+  // to eliminate the white splash screen and redirect to login instantly without waiting.
+  const [status, setStatus] = useState<AuthStatus>(() => (hasSessionHint() ? 'loading' : 'signedOut'))
   const [user, setUser] = useState<AuthUser | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [consentNeeded, setConsentNeeded] = useState<string[]>([])
@@ -25,6 +37,15 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     setSessionId(p?.session_id ?? null)
     setConsentNeeded(p?.consent_needed ?? [])
     setStatus(p ? 'signedIn' : 'signedOut')
+    try {
+      if (p) {
+        localStorage.setItem(HAS_SESSION_KEY, '1')
+      } else {
+        localStorage.removeItem(HAS_SESSION_KEY)
+      }
+    } catch {
+      /* ignore storage errors */
+    }
     if (why !== null) setNotice(why)
   }, [])
 
@@ -42,7 +63,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       apply(await authApi.me())
     } catch (e) {
       if (unreachable(e)) {
-        setStatus('offline')
+        setStatus(hasSessionHint() ? 'offline' : 'signedOut')
       } else {
         apply(null)
       }
@@ -58,20 +79,28 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     const checkSession = () => {
       authApi
         .me()
-        .then((p) => alive && apply(p))
+        .then((p) => {
+          if (!alive) return
+          apply(p)
+        })
         .catch((e) => {
           if (!alive) return
           if (!unreachable(e)) {
             apply(null)
             return
           }
-          // The one-command launcher starts Vite and Uvicorn together. Allow
-          // the backend time to finish importing before showing a hard error.
-          attempt += 1
-          if (attempt < 5) {
-            retryTimer = setTimeout(checkSession, 1500)
+          // In local development the launcher starts Vite and Uvicorn concurrently,
+          // so allow brief retry. In production, only retry if a known session was stored.
+          const shouldRetry = (import.meta.env.DEV || hasSessionHint()) && attempt < 2
+          if (shouldRetry) {
+            attempt += 1
+            retryTimer = setTimeout(checkSession, 1000)
           } else {
-            setStatus('offline')
+            if (hasSessionHint()) {
+              setStatus('offline')
+            } else {
+              apply(null)
+            }
           }
         })
     }

@@ -99,7 +99,16 @@ def load_settings(config_path: Path | None = None) -> AuthSettings:
         reset_lifetime_minutes=int(reset_cfg.get("token_lifetime_minutes", 15)),
         reset_request_per_hour=int(reset_cfg.get("request_per_hour", 10)),
         reset_token_bytes=int(reset_cfg.get("token_bytes", 32)),
-        allowed_origins=tuple(origin.rstrip("/") for origin in csv("CORS_ORIGINS")),
+        allowed_origins=tuple(
+            origin.rstrip("/")
+            for origin in (
+                csv("CORS_ORIGINS")
+                if os.environ.get("CORS_ORIGINS")
+                else csv("CORS_ALLOWED_ORIGINS")
+                if os.environ.get("CORS_ALLOWED_ORIGINS")
+                else ()
+            )
+        ),
     )
 
 

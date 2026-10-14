@@ -192,6 +192,8 @@ graph LR
 
 ---
 ## Current Status
-- **Active phase:** Production Deployment & Cloud Optimization (Session 65).
-- **Last completed:** Hardened frontend build with resilient `VITE_API_URL` defaults (`https://speech-guru-api.onrender.com`), static define injection, CSP allowlist for Render backend, and verified error-free Vercel production build (Session 65, D-084).
-- **Next action:** Verify live Vercel frontend and Render backend deployments.
+- **Active phase:** Production Deployment & Cloud Optimization (Session 67).
+- **Last completed:** Eliminated white screen on Vercel link by enabling zero-delay synchronous login redirect and removing splash blocking from public routes (Session 67, D-086).
+- **Next action:** Update Vercel environment variable `VITE_API_URL` to `https://speech-api-m71k.onrender.com`, push changes to GitHub, and redeploy.
+
+

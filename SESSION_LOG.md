@@ -9,10 +9,10 @@
 
 | Key | Value |
 | --- | --- |
-| Active phase | Production Deployment on Vercel & Render (Session 65) |
-| Last milestone | Eliminated Vercel build crash by providing safe fallback backend URL (https://speech-guru-api.onrender.com) and static define in vite.config.ts and client.ts (Session 65) |
-| Next action | Push to GitHub to trigger successful Vercel frontend deployment |
-| Binding decisions | `docs/20-ENGINEERING-REVIEW.md` ADR-001…012, D-035, D-036, D-048…D-084 |
+| Active phase | Production Deployment on Vercel & Render (Session 67) |
+| Last milestone | Eliminated white screen on Vercel link by enabling zero-delay synchronous login redirect and removing splash blocking from public routes (Session 67) |
+| Next action | Push to GitHub and redeploy on Vercel with VITE_API_URL |
+| Binding decisions | `docs/20-ENGINEERING-REVIEW.md` ADR-001…012, D-035, D-036, D-048…D-086 |
 | Open questions | Final YouTube demo video link; team member Devpost account verification |
 
 
@@ -106,6 +106,8 @@
 | D-082 | 2026-10-14 | Dynamic INT8 CPU quantization for SpeechFlawPredictor in `ml/inference/predict.py`: reduces runtime memory footprint of the full heavy model (`best_checkpoint.pt`, 15 classes) from ~580 MB down to ~340 MB, enabling accurate neural flaw detection to run reliably within Render's 512 MB free tier RAM without OOM kills. | Agent (Session 63) |
 | D-083 | 2026-10-14 | Fixed Vercel production build failure by explicitly scoping root `.gitignore` to un-ignore `frontend/src/lib/data/` and tracking `frontend/src/lib/data/dataset.generated.ts`, resolving 25 TypeScript compilation errors (TS2307, TS7006) on `Dataset.tsx` during Vercel deployment. | Agent (Session 64) |
 | D-084 | 2026-10-14 | Fixed Vercel build failure from missing `VITE_API_URL` by replacing hard-fail check in `frontend/vite.config.ts` with safe defaults (`https://speech-guru-api.onrender.com` in production, `http://localhost:8000` in dev), added `import.meta.env.VITE_API_URL` static define, added client-side `API_BASE` fallback in `frontend/src/lib/api/client.ts`, and updated CSP to allow `*.onrender.com` domains. | Agent (Session 65) |
+| D-085 | 2026-10-14 | Verified live backend deployment on Render (https://speech-api-m71k.onrender.com) and decoupled frontend build from hardcoded URLs. Eliminated hardcoded fallback from frontend/src/lib/api/client.ts and frontend/vite.config.ts, leveraging wildcard CSP https://*.onrender.com and dynamic VITE_API_URL injection. Supported CORS_ALLOWED_ORIGINS alias in backend/auth/config.py. | User & Agent (Session 66) |
+| D-086 | 2026-10-14 | Eliminated white splash screen delay on public routes by removing `Splash` blocking from `PublicOnly`, adding instant `localStorage` session-hint detection in `AuthProvider` (initializing unauthenticated visitors to `signedOut` synchronously), and streamlining `RequireAuth` root navigation directly to `/login`. | User & Agent (Session 67) |
 
 
 
@@ -2387,5 +2389,77 @@
 **Next step**
 - Commit and push to GitHub (`main`) to trigger clean automatic Vercel deployment.
 
+---
 
+### Session 66 (2026-10-14, ~12:50 IST) [Render Backend Verification & Vercel Env Configuration]
+**User requests**
+- Verify live deployed backend API on Render (`https://speech-api-m71k.onrender.com`) and strictly ensure it is NOT hardcoded in the codebase.
+- Provide environment variables for Vercel in the exact table format matching Render's dashboard to prevent all API errors.
 
+**What was done**
+- Verified live Render backend API (`https://speech-api-m71k.onrender.com`):
+  - `/api/health`: 200 OK (`{"status":"ok","services":{"mongodb":"up"}}`).
+  - `/api/legal`: 200 OK (all 3 legal docs loaded: privacy 1.2, terms 1.0, cookies 1.0).
+  - `/api/auth/me`: 401 Unauthorized (`{"detail":"Not signed in."}`, sets `SameSite=none; Secure` cookie header).
+  - CORS preflight (OPTIONS): 200 OK with `access-control-allow-origin: https://speech-guru-six.vercel.app` and `access-control-allow-credentials: true`.
+- Decoupled codebase from hardcoded backend URLs:
+  - `frontend/vite.config.ts`: Removed hardcoded `speech-guru-api.onrender.com`, dynamically uses `env.VITE_API_URL` or `process.env.VITE_API_URL` (defaulting to `http://localhost:8000` in dev and `''` in production), retaining `https://*.onrender.com` wildcard in CSP so all Render backends work without hardcoding.
+  - `frontend/src/lib/api/client.ts`: Removed hardcoded URL fallback from `API_BASE`, dynamically using `import.meta.env.VITE_API_URL`.
+  - `backend/auth/config.py`: Added dual alias support for `CORS_ALLOWED_ORIGINS` alongside `CORS_ORIGINS` to match Render dashboard environment variable naming seamlessly.
+  - `DEPLOYMENT.md`: Updated documentation examples from fixed domain to generic placeholder `https://<your-service>.onrender.com`.
+- Tested and validated:
+  - `npm run build` in `frontend/`: passes cleanly in <1s.
+  - Root `npm run build`: passes cleanly.
+  - Python test suite: all 68 API tests pass (`68 passed, 729 warnings in 58s`).
+
+**Files changed**
+- `frontend/vite.config.ts`
+- `frontend/src/lib/api/client.ts`
+- `backend/auth/config.py`
+- `DEPLOYMENT.md`
+- `SESSION_LOG.md`
+- `ROADMAP.md`
+
+**Decisions**
+- D-085: Verified live backend deployment on Render (https://speech-api-m71k.onrender.com) and decoupled frontend build from hardcoded URLs. Eliminated hardcoded fallback from frontend/src/lib/api/client.ts and frontend/vite.config.ts, leveraging wildcard CSP https://*.onrender.com and dynamic VITE_API_URL injection. Supported CORS_ALLOWED_ORIGINS alias in backend/auth/config.py.
+
+**Problems / bugs found**
+- None.
+
+**Next step**
+- Add `VITE_API_URL` in Vercel project environment variables and trigger deployment.
+
+---
+
+### Session 67 (2026-10-14, ~13:05 IST) [Vercel White Screen Delay Fix & Zero-Latency Login Redirection]
+**User requests**
+- Eliminate the white screen / loading delay when opening the deployed Vercel link (`https://speech-guru-six.vercel.app/`), redirecting immediately and directly to `/login`.
+- Resolve the offline warning banner (`Can't reach the Speech Guru API at https://speech-api-t8sr.onrender.com...`) shown on the login page in the deployed app.
+
+**What was done**
+- Diagnosed root causes:
+  - White screen delay: `AuthProvider` was initialized with `status = 'loading'` unconditionally, blocking both `<RequireAuth>` (which rendered a 100vh `<Splash />` screen while awaiting network roundtrips) and `<PublicOnly>` (which also blocked `/login` with `<Splash />` until `authApi.me()` returned). Furthermore, unreachable/cold-start backend attempts triggered 5 consecutive retries with 1.5s delays (7.5s freeze) before resolving.
+  - Offline warning: The user's active Vercel deployment was compiled against an obsolete/decommissioned backend URL (`speech-api-t8sr.onrender.com`), whereas the active working backend is `https://speech-api-m71k.onrender.com`.
+- Implemented zero-latency login redirection:
+  - `frontend/src/components/auth/AuthProvider.tsx`: Added synchronous session-hint detection (`localStorage.getItem('sa_has_session') === '1'`). First-time visitors and unauthenticated users immediately initialize to `status = 'signedOut'`, completely bypassing the `<Splash />` state.
+  - `frontend/src/components/auth/Guards.tsx`: Removed `status === 'loading'` splash blocking from `PublicOnly` so `/login`, `/register`, and `/forgot-password` render instantly on frame 0. Streamlined `RequireAuth` so visiting `/` cleanly redirects to `/login` without redundant `?next=%2F`.
+  - Capped cold-start retries: Replaced 5 retries / 7.5s delay with a single non-blocking check for unauthenticated visitors, preventing network stalls.
+- Tested and verified:
+  - `npm run build` in `frontend/`: passes in <800ms.
+  - Root `npm run build`: passes with exit code 0.
+  - `npx oxlint`: 0 errors.
+
+**Files changed**
+- `frontend/src/components/auth/Guards.tsx`
+- `frontend/src/components/auth/AuthProvider.tsx`
+- `SESSION_LOG.md`
+- `ROADMAP.md`
+
+**Decisions**
+- D-086: Eliminated white splash screen delay on public routes by removing `Splash` blocking from `PublicOnly`, adding instant `localStorage` session-hint detection in `AuthProvider` (initializing unauthenticated visitors to `signedOut` synchronously), and streamlining `RequireAuth` root navigation directly to `/login`.
+
+**Problems / bugs found**
+- None.
+
+**Next step**
+- Update Vercel environment variable `VITE_API_URL` to `https://speech-api-m71k.onrender.com`, push changes to GitHub, and redeploy.

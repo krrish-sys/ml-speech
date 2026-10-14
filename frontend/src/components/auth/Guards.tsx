@@ -20,8 +20,9 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const loc = useLocation()
   if (status === 'loading') return <Splash />
   if (status !== 'signedIn') {
-    const next = encodeURIComponent(loc.pathname + loc.search)
-    return <Navigate to={`/login?next=${next}`} replace />
+    const target = loc.pathname + loc.search
+    const query = target && target !== '/' ? `?next=${encodeURIComponent(target)}` : ''
+    return <Navigate to={`/login${query}`} replace />
   }
   // Updated Terms or Privacy Policy must be accepted first (the API enforces this too).
   if (consentNeeded.length) return <ConsentGate />
@@ -54,7 +55,6 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
 export function PublicOnly({ children }: { children: ReactNode }) {
   const { status } = useAuth()
   const loc = useLocation()
-  if (status === 'loading') return <Splash />
   if (status === 'signedIn') {
     const next = new URLSearchParams(loc.search).get('next')
     return <Navigate to={safeNext(next)} replace />
