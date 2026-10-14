@@ -4,9 +4,10 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { PasswordFeedback, PasswordField } from '../../components/auth/PasswordField'
 import SiteFooter from '../../components/legal/SiteFooter'
 import { authApi, type PasswordPolicy } from '../../lib/api/auth'
-import { ApiError, API_BASE } from '../../lib/api/client'
+import { ApiError, API_BASE, isUnreachableError } from '../../lib/api/client'
 import { useAuth } from '../../lib/auth/context'
 import { safeNext } from '../../lib/auth/redirect'
+import { useApiHealth } from '../../lib/useApiHealth'
 
 const DEFAULT_POLICY: PasswordPolicy = {
   min_length: 8,
@@ -69,10 +70,9 @@ function OfflineNotice({ onRetry }: { onRetry: () => void }) {
     <p className="notice notice-warn" role="alert">
       <CircleAlert size={15} />
       <span>
-        Can't reach the Speech Guru API at <span className="mono">{API_BASE}</span>, or its database (MongoDB)
-        isn't running. Start them, then{' '}
+        Connecting to the Speech Guru API at <span className="mono">{API_BASE}</span>... The server may be waking up from idle. Retrying automatically, or{' '}
         <button type="button" className="link-btn" onClick={onRetry}>
-          try again
+          check now
         </button>
         .
       </span>
@@ -82,6 +82,7 @@ function OfflineNotice({ onRetry }: { onRetry: () => void }) {
 
 export function LoginPage() {
   const { signIn, notice, clearNotice, status, refresh } = useAuth()
+  const health = useApiHealth()
   const policy = usePolicy()
   const nav = useNavigate()
   const loc = useLocation()
@@ -90,6 +91,13 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  // Auto-recover when API health becomes online
+  useEffect(() => {
+    if (health.state === 'online' && status === 'offline') {
+      void refresh()
+    }
+  }, [health.state, status, refresh])
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -100,7 +108,9 @@ export function LoginPage() {
       await signIn(email, password)
       nav(next, { replace: true })
     } catch (err) {
-      setPassword('')
+      if (!isUnreachableError(err)) {
+        setPassword('')
+      }
       setError(err instanceof ApiError ? err.message : 'Sign-in failed. Try again.')
     } finally {
       setBusy(false)

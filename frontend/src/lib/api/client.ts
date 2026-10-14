@@ -13,6 +13,10 @@ export class ApiError extends Error {
   }
 }
 
+/** Returns true if the error indicates no answer, bad gateway, or service offline. */
+export const isUnreachableError = (e: unknown): boolean =>
+  e instanceof ApiError && (e.status === 0 || e.status === 502 || e.status === 503 || e.status === 504)
+
 // ---- session plumbing (see lib/auth) ----
 // The session itself is an HttpOnly cookie the browser sends automatically; script never sees it.
 // The CSRF token is held in memory only and sent on every state-changing request.

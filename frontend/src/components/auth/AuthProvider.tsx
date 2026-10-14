@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { authApi, privacyApi, type AuthUser, type SessionPayload } from '../../lib/api/auth'
-import { ApiError, setConsentRequiredHandler, setCsrfToken, setUnauthorizedHandler } from '../../lib/api/client'
+import { isUnreachableError, setConsentRequiredHandler, setCsrfToken, setUnauthorizedHandler } from '../../lib/api/client'
 import { setStoreUser } from '../../lib/analysis/store'
 import { AuthContext, type AuthState, type AuthStatus } from '../../lib/auth/context'
 import { setBattleUser } from '../../lib/battles'
 import { getConsent, needsChoice, onConsentChanged } from '../../lib/consent'
 
-/** No answer (0), or the API is up but its session store or database isn't (503): not "signed out". */
-const unreachable = (e: unknown) => e instanceof ApiError && (e.status === 0 || e.status === 503)
+const unreachable = isUnreachableError
 
 const HAS_SESSION_KEY = 'sa_has_session'
 
@@ -111,6 +110,15 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       if (retryTimer) clearTimeout(retryTimer)
     }
   }, [apply])
+
+  // Automatically poll every 3 seconds to recover as soon as the server wakes up / deploys
+  useEffect(() => {
+    if (status !== 'offline') return
+    const pollTimer = setInterval(() => {
+      void refresh()
+    }, 3000)
+    return () => clearInterval(pollTimer)
+  }, [status, refresh])
 
   // Any API call that comes back 401 means the session ended elsewhere;
   // CONSENT_REQUIRED means updated terms were published while the page was open.
